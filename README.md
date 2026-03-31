@@ -48,8 +48,6 @@ export YTDLP_COOKIES_FILE=/absolute/path/to/cookies.txt
 export YTDLP_COOKIES_FROM_BROWSER=chrome
 ```
 
-Clipdown automatically retries YouTube bot-check failures with yt-dlp's Android client profile first; if YouTube still blocks the request, configure one of the cookie options above.
-
 ## Deployment Notes (Vercel / Serverless)
 
 - Clipdown runs best as a traditional long-running server (VM/container).

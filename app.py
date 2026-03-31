@@ -63,6 +63,26 @@ def run_ytdlp(cmd, url=None, timeout=60):
     return result
 
 
+def build_ytdlp_flags():
+    flags = ["--no-playlist"]
+    cookies_file = os.environ.get("YTDLP_COOKIES_FILE", "").strip()
+    cookies_from_browser = os.environ.get("YTDLP_COOKIES_FROM_BROWSER", "").strip()
+    if cookies_file:
+        flags += ["--cookies", cookies_file]
+    elif cookies_from_browser:
+        flags += ["--cookies-from-browser", cookies_from_browser]
+    return flags
+
+
+def build_ytdlp_cmd(*args):
+    override = os.environ.get("YT_DLP_BIN", "").strip()
+    if override:
+        return [override, *args]
+    if shutil.which("yt-dlp"):
+        return ["yt-dlp", *args]
+    return [sys.executable, "-m", "yt_dlp", *args]
+
+
 def run_download(job_id, url, format_choice, format_id):
     job = jobs[job_id]
     out_template = os.path.join(DOWNLOAD_DIR, f"{job_id}.%(ext)s")
@@ -150,10 +170,9 @@ def get_info():
         result = run_ytdlp(cmd, url=url, timeout=60)
         if result.returncode != 0:
             last_error = result.stderr.strip().split("\n")[-1]
-            if YOUTUBE_BOT_ERROR_TEXT in result.stderr:
+            if "Sign in to confirm you’re not a bot" in result.stderr:
                 last_error = (
-                    "YouTube blocked this request. "
-                    "Try again with cookies. "
+                    "YouTube requires cookies for this video. "
                     "Set YTDLP_COOKIES_FILE or YTDLP_COOKIES_FROM_BROWSER."
                 )
             return jsonify({"error": last_error}), 400
