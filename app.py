@@ -22,6 +22,45 @@ if not DOWNLOAD_DIR:
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 jobs = {}
+YOUTUBE_BOT_ERROR_TEXT = "Sign in to confirm you’re not a bot"
+
+
+def build_ytdlp_flags():
+    flags = ["--no-playlist"]
+    cookies_file = os.environ.get("YTDLP_COOKIES_FILE", "").strip()
+    cookies_from_browser = os.environ.get("YTDLP_COOKIES_FROM_BROWSER", "").strip()
+    if cookies_file:
+        flags += ["--cookies", cookies_file]
+    elif cookies_from_browser:
+        flags += ["--cookies-from-browser", cookies_from_browser]
+    return flags
+
+
+def build_ytdlp_cmd(*args):
+    override = os.environ.get("YT_DLP_BIN", "").strip()
+    if override:
+        return [override, *args]
+    if shutil.which("yt-dlp"):
+        return ["yt-dlp", *args]
+    return [sys.executable, "-m", "yt_dlp", *args]
+
+
+def is_youtube_url(url):
+    u = (url or "").lower()
+    return "youtube.com" in u or "youtu.be" in u
+
+
+def run_ytdlp(cmd, url=None, timeout=60):
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    if (
+        result.returncode != 0
+        and url
+        and is_youtube_url(url)
+        and YOUTUBE_BOT_ERROR_TEXT in result.stderr
+    ):
+        retry_cmd = [*cmd, "--extractor-args", "youtube:player_client=android"]
+        return subprocess.run(retry_cmd, capture_output=True, text=True, timeout=timeout)
+    return result
 
 
 def build_ytdlp_flags():
@@ -60,12 +99,13 @@ def run_download(job_id, url, format_choice, format_id):
     cmd.append(url)
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        result = run_ytdlp(cmd, url=url, timeout=300)
         if result.returncode != 0:
             last_error = result.stderr.strip().split("\n")[-1]
-            if "Sign in to confirm you’re not a bot" in result.stderr:
+            if YOUTUBE_BOT_ERROR_TEXT in result.stderr:
                 last_error = (
-                    "YouTube requires cookies for this video. "
+                    "YouTube blocked this request. "
+                    "Try again with cookies. "
                     "Set YTDLP_COOKIES_FILE or YTDLP_COOKIES_FROM_BROWSER."
                 )
             job["status"] = "error"
@@ -127,7 +167,7 @@ def get_info():
 
     cmd = build_ytdlp_cmd(*build_ytdlp_flags(), "-j", url)
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        result = run_ytdlp(cmd, url=url, timeout=60)
         if result.returncode != 0:
             last_error = result.stderr.strip().split("\n")[-1]
             if "Sign in to confirm you’re not a bot" in result.stderr:
